@@ -22,21 +22,29 @@ def resolve_entities(nodes_dict):
         groups.append(group)
         used.update(group)
 
+ # merge groups that share either a first-word or last-word match
     merged_groups = []
     consumed = set()
     for i, g1 in enumerate(groups):
         if i in consumed:
             continue
         combined = set(g1)
-        last_words_1 = {n.split()[-1] for n in g1 if n.split()}
+        words_1 = set()
+        for n in g1:
+            parts = n.split()
+            if parts:
+                words_1.add(parts[0])
+                words_1.add(parts[-1])
         for j, g2 in enumerate(groups):
             if j <= i or j in consumed:
                 continue
-            # also require same type here
-            if nodes_dict.get(next(iter(g1))) != nodes_dict.get(next(iter(g2))):
-                continue
-            last_words_2 = {n.split()[-1] for n in g2 if n.split()}
-            if last_words_1 & last_words_2:
+            words_2 = set()
+            for n in g2:
+                parts = n.split()
+                if parts:
+                    words_2.add(parts[0])
+                    words_2.add(parts[-1])
+            if words_1 & words_2:
                 combined |= g2
                 consumed.add(j)
         merged_groups.append(combined)

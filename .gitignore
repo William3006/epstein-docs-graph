@@ -218,3 +218,6 @@ __marimo__/
 .streamlit/secrets.toml
 graph_data.json
 graph.png
+progress.json
+progress_*.json
+raw_files/

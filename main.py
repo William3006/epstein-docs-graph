@@ -8,7 +8,7 @@ Every organization, location, or institution mentioned must have at least one re
 
 Every relation MUST include a real evidence_quote copied directly from the text. Never leave evidence_quote empty.
 
-Use ONLY these entity types: "person", "organization"
+Use ONLY these entity types: "person", "organization", "legal_case", "law_firm", "document", "location"
 Use ONLY these relation types: "colleague", "employer", "founder", "co-founder", "introduced_by", "board_member", "conflict_with", "family", "informant_to", "represented_by", "directed_by", "investigated_by", "located_at", "member_of", "target_of"
 
 Format:
