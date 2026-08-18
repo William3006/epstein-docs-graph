@@ -1,0 +1,36 @@
+import json
+
+def extract_all(paragraphs):
+    all_data = []
+    for p in paragraphs:
+        raw = extract(p)
+        data = clean_json(raw)
+        all_data.append(data)
+    return all_data
+
+def merge_naive(all_data):
+    nodes = {}
+    links = []
+    for data in all_data:
+        for e in data["entities"]:
+            nodes[e["name"]] = e["type"]
+        for r in data["relations"]:
+            links.append(r)
+    return {
+        "nodes": [{"id": k, "type": v} for k, v in nodes.items()],
+        "links": links
+    }
+
+if __name__ == "__main__":
+    paragraphs = [
+        "Sarah Chen founded Bright Path Robotics in 2018. Her co-founder, Marcus Webb, had previously worked with her at TechCorp.",
+        "S. Chen brought on David Kim as CTO in 2020. Kim was introduced to Chen by investor Angela Ruiz.",
+        "Marcus left Bright Path in 2021 after clashing with David Kim over product direction. Webb later joined a rival firm."
+    ]
+    all_data = extract_all(paragraphs)
+    merged = merge_naive(all_data)
+    with open("graph_data.json", "w") as f:
+        json.dump(merged, f, indent=2)
+    print(f"Nodes: {len(merged['nodes'])}")
+    for n in merged['nodes']:
+        print(" -", n['id'])

@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <style>
+            body {
+                margin: 0;
+                background: #111;
+            }
+            #graph {
+                width: 100vw;
+                height: 100vh;
+            }
+            text {
+                fill: #eee;
+                font-family: sans-serif;
+                font-size: 11px;
+                pointer-events: none;
+            }
+            .tooltip {
+                position: absolute;
+                background: #222;
+                color: #eee;
+                padding: 6px 10px;
+                border-radius: 4px;
+                font-family: sans-serif;
+                font-size: 12px;
+                pointer-events: auto;
+                display: none;
+                max-width: 320px;
+                max-height: 300px;
+                overflow-y: auto;
+            }
+        </style>
+    </head>
+    <body>
+        <svg id="graph"></svg>
+        <div class="tooltip" id="tooltip"></div>
+        <script src="https://unpkg.com/d3@7"></script>
+        <script>
+            fetch("graph_data.json")
+                .then((r) => r.json())
+                .then((data) => {
+                    const linkCounts = {};
+                    data.links.forEach((l) => {
+                        const key = [l.source, l.target].sort().join("|");
+                        linkCounts[key] = (linkCounts[key] || 0) + 1;
+                    });
+                    const degree = {};
+                    data.nodes.forEach((n) => (degree[n.id] = 0));
+                    data.links.forEach((l) => {
+                        degree[l.source]++;
+                        degree[l.target]++;
+                    });
+
+                    // radius is derived from degree the same way node circles are sized below,
+                    // so link distance can reference it directly for both endpoints
+                    const radius = (d) => 10 + degree[d.id] * 4;
+
+                    const width = window.innerWidth,
+                        height = window.innerHeight;
+                    const svg = d3
+                        .select("#graph")
+                        .attr("width", width)
+                        .attr("height", height);
+                    const tooltip = d3.select("#tooltip");
+                    tooltip.on("mouseleave", () => tooltip.style("display","none"));
+
+                    const sim = d3.forceSimulation(data.nodes)
+                        .force("link", d3.forceLink(data.links).id(d => d.id)
+                            // distance now scales with both endpoints' radii instead of a flat 150 —
+                            // bigger circles push their neighbors further away
+                            .distance(d => 80 + radius(d.source) + radius(d.target)))
+                        .force("charge", d3.forceManyBody().strength(-200))
+                        .force("centerPull", d3.forceRadial(d => 250 - degree[d.id] * 35, width/2, height/2).strength(0.3))
+                        .force("collide", d3.forceCollide(d => 15 + degree[d.id]*4))
+                        // lower alphaDecay = simulation cools more slowly = fewer abrupt snaps
+                        // higher velocityDecay = more "friction" per tick = less oscillation/rubberbanding,
+                        // especially noticeable on big nodes with strong collide/charge forces
+                        .alphaDecay(0.02)
+                        .velocityDecay(0.55);
+
+                    const link = svg
+                        .append("g")
+                        .selectAll("line")
+                        .data(data.links)
+                        .join("line")
+                        .attr("stroke", "#888")
+                        .attr("stroke-width", (d) => {
+                            const key = [
+                                d.source.id || d.source,
+                                d.target.id || d.target,
+                            ]
+                                .sort()
+                                .join("|");
+                            return linkCounts[key] * 2;
+                        })
+                        .on("mouseover", (e, d) => {
+                            tooltip
+                                .style("display", "block")
+                                .html(`<b>${d.type}</b><br>${d.quote || ""}`);
+                        })
+                        .on("mouseover", (e,d) => {
+                          let html = `<b>${d.id}</b><br>Type: ${d.type}<br>Connections: ${degree[d.id]}<hr style="border-color:#444">`;
+                          if (d.mentions && d.mentions.length) {
+                            d.mentions.forEach(m => {
+                              html += `<div style="margin-bottom:6px;"><i>${m.relation}</i> — doc ${m.doc}<br><span style="color:#aaa">"${m.quote}"</span></div>`;
+                            });
+                          } else {
+                            html += `<i>No mentions recorded</i>`;
+                          }
+                          tooltip.style("display","block").style("left", (e.pageX+12)+"px").style("top", (e.pageY+12)+"px").html(html);
+                        })
+                        .on("mouseout", () => tooltip.style("display", "none"));
+
+                    const node = svg
+                        .append("g")
+                        .selectAll("circle")
+                        .data(data.nodes)
+                        .join("circle")
+                        .attr("r", (d) => radius(d))
+                        .attr("fill", (d) =>
+                            d.type === "person" ? "#4a90d9" : "#5cb85c",
+                        )
+                        .on("mouseover", (e, d) => {
+                            let html = `<b>${d.id}</b><br>Type: ${d.type}<br>Connections: ${degree[d.id]}<hr style="border-color:#444">`;
+                            if (d.mentions && d.mentions.length) {
+                                d.mentions.forEach((m) => {
+                                    html += `<div style="margin-bottom:6px;"><i>${m.relation}</i> — doc ${m.doc}<br><span style="color:#aaa">"${m.quote}"</span></div>`;
+                                });
+                            } else {
+                                html += `<i>No mentions recorded</i>`;
+                            }
+                            tooltip.style("display", "block").html(html);
+                        })
+                        .on("mousemove", (e) =>
+                            tooltip
+                                .style("left", e.pageX + 12 + "px")
+                                .style("top", e.pageY + 12 + "px"),
+                        )
+                        .on("mouseout", () => tooltip.style("display", "none"))
+                        .call(
+                            d3
+                                .drag()
+                                .on("start", (e, d) => {
+                                    if (!e.active)
+                                        sim.alphaTarget(0.3).restart();
+                                    d.fx = d.x;
+                                    d.fy = d.y;
+                                })
+                                .on("drag", (e, d) => {
+                                    d.fx = e.x;
+                                    d.fy = e.y;
+                                })
+                                .on("end", (e, d) => {
+                                    if (!e.active) sim.alphaTarget(0);
+                                    d.fx = null;
+                                    d.fy = null;
+                                }),
+                        );
+
+                    const label = svg
+                        .append("g")
+                        .selectAll("text")
+                        .data(data.nodes)
+                        .join("text")
+                        .text((d) => d.id);
+
+                    sim.on("tick", () => {
+                        link.attr("x1", (d) => d.source.x)
+                            .attr("y1", (d) => d.source.y)
+                            .attr("x2", (d) => d.target.x)
+                            .attr("y2", (d) => d.target.y);
+                        node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
+                        label
+                            .attr("x", (d) => d.x + 14)
+                            .attr("y", (d) => d.y + 4);
+                    });
+                });
+        </script>
+    </body>
+</html>
